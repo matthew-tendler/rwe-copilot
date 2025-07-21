@@ -15,7 +15,7 @@ RWE Copilot is an AI-powered assistant for real-world evidence (RWE) teams. It r
 - Streamlit
 - LangChain
 - Hugging Face Transformers
-- PubMed API or mock data
+- PubMed API
 
 ## 📦 Setup
 
