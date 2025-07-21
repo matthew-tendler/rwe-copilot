@@ -41,7 +41,8 @@ def fetch_abstracts_from_europepmc(query: str, max_results: int = 3):
 
 
 def summarize_abstract(abstracts):
-    """Summarize a list of abstracts: summarize each, then combine summaries. Limit to top 2 abstracts and truncate combined summaries if too long."""
+    """Summarize a list of abstracts: summarize each, then combine summaries.
+    Safe for Hugging Face's token limit."""
     if not abstracts:
         return "No abstracts found for that query."
     # Limit to top 2 abstracts
@@ -50,17 +51,23 @@ def summarize_abstract(abstracts):
     for a in abstracts:
         try:
             text = a["abstract"]
-            summary = summarizer(text, max_length=80, min_length=20, do_sample=False)[0]["summary_text"]
+            # Truncate individual abstracts to a safe length (~800 chars)
+            safe_text = text[:800]
+            summary = summarizer(safe_text, max_length=80, min_length=20, do_sample=False)[0]["summary_text"]
             summaries.append(summary)
         except Exception as e:
             summaries.append("[Error summarizing abstract]")
-    # Combine the summaries into a final summary, but truncate if too long
+    if not summaries:
+        return "No summaries could be generated."
+    # Combine summaries, and split further if needed
     combined = " ".join(summaries)
-    max_chars = 2000
-    if len(combined) > max_chars:
-        combined = combined[:max_chars]
-    try:
-        final_summary = summarizer(combined, max_length=150, min_length=30, do_sample=False)[0]["summary_text"]
-    except Exception as e:
-        final_summary = " ".join(summaries)
-    return strip_html_tags(final_summary)
+    chunk_size = 900  # Characters. BART's limit is ~1024 tokens; 900 chars is a safe bet.
+    chunks = [combined[i:i + chunk_size] for i in range(0, len(combined), chunk_size)]
+    final_summaries = []
+    for chunk in chunks:
+        try:
+            summ = summarizer(chunk, max_length=100, min_length=30, do_sample=False)[0]["summary_text"]
+            final_summaries.append(summ)
+        except Exception:
+            final_summaries.append(chunk)
+    return strip_html_tags(" ".join(final_summaries))
