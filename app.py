@@ -1,78 +1,100 @@
+import os
 import streamlit as st
-from chains.summarization_chain import summarize_abstract, fetch_abstracts_from_europepmc, get_tech_stack
 import pandas as pd
-import openai
-client = openai.OpenAI(api_key="sk-...your-key-here...")
+import requests
+import re
 
-st.title("🧠 RWE Copilot")
+# --- Constants ---
+HUGGINGFACE_SUMMARIZATION_URL = "https://api-inference.huggingface.co/models/sshleifer/distilbart-cnn-12-6"
+HF_TOKEN = os.environ.get("RWE_THREE_COPILOT")
 
-query = st.text_input("Enter a disease or drug:")
-submitted = st.button("Search")
+# --- Helper functions ---
 
-if query and submitted:
-    with st.spinner("Fetching research and generating AI summary..."):
-        abstracts = fetch_abstracts_from_europepmc(query)
-        if not abstracts:
-            st.error("No abstracts found for that query.")
+def strip_html_tags(text):
+    clean = re.compile('<.*?>')
+    return re.sub(clean, '', text)
+
+def fetch_abstracts_from_europepmc(query, max_results=3):
+    base_url = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
+    params = {
+        "query": query,
+        "format": "json",
+        "pageSize": max_results,
+        "resultType": "core"
+    }
+    response = requests.get(base_url, params=params)
+    response.raise_for_status()
+    data = response.json()
+    results = []
+    for item in data.get("resultList", {}).get("result", []):
+        if "abstractText" in item and item["abstractText"].strip():
+            results.append({
+                "Title": item.get("title"),
+                "Journal": item.get("journalTitle"),
+                "PMID": item.get("pmid"),
+                "DOI": item.get("doi"),
+                "Abstract": strip_html_tags(item["abstractText"])
+            })
+    return results
+
+def hf_summarize(text):
+    if not HF_TOKEN:
+        return "[Error: Hugging Face API token not set. Please set RWE_THREE_COPILOT in your environment.]"
+    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+    payload = {"inputs": text}
+    response = requests.post(HUGGINGFACE_SUMMARIZATION_URL, headers=headers, json=payload)
+    if response.status_code == 200:
+        try:
+            return response.json()[0]["summary_text"]
+        except Exception:
+            return "[Error: Unexpected response from Hugging Face API]"
+    else:
+        return f"[Error: Hugging Face API returned status {response.status_code}]"
+
+def summarize_abstracts(abstracts):
+    if not abstracts:
+        return "No abstracts found for that query."
+    summaries = []
+    for a in abstracts[:2]:
+        abs_text = a.get("Abstract", "")
+        if abs_text:
+            summary = hf_summarize(abs_text[:800])
+            summaries.append(summary)
+    combined = " ".join(summaries)
+    if len(combined) > 2000:
+        combined = combined[:2000]
+    return hf_summarize(combined)
+
+# --- Streamlit App UI ---
+
+st.set_page_config(page_title="RWE Copilot", layout="wide")
+
+st.title("RWE Copilot")
+st.write("PubMed abstracts, summarized by AI. Powered by Europe PMC and Hugging Face.")
+
+query = st.text_input("Enter your search query (disease, gene, drug, etc.)")
+
+if query:
+    with st.spinner("Loading abstracts and generating summary..."):
+        try:
+            abstracts = fetch_abstracts_from_europepmc(query)
+        except Exception as e:
+            st.error(f"Error fetching abstracts: {e}")
+            abstracts = []
+
+        if abstracts:
+            ai_summary = summarize_abstracts(abstracts)
+            # --- Show AI Summary ---
+            st.subheader("AI Summary")
+            st.info(ai_summary)
+
+            # --- Show study table ---
+            st.subheader("Abstracts Table")
+            df = pd.DataFrame(abstracts)
+            st.dataframe(df[["Title", "Journal", "PMID", "DOI"]], use_container_width=True)
         else:
-            # --- AI Summary Section (TOP, big font) ---
-            st.markdown("""
-                <div style='background-color:#fff9c4;padding:1.5em 1em 1.5em 1em;border-radius:12px;margin-bottom:1.5em;border:2px solid #ffe082;'>
-                    <span style='font-size:1.6em;font-weight:bold;color:#333;'>AI-Powered Summary</span><br>
-            """, unsafe_allow_html=True)
-            summary = summarize_abstract(abstracts)
-            st.markdown(f"<div style='font-size:1.2em;margin-top:0.7em;color:#222;'>{summary}</div></div>", unsafe_allow_html=True)
+            st.warning("No abstracts found.")
+else:
+    st.info("Enter a query to get started.")
 
-            # --- Copy Summary Button ---
-            st.text_area('Copy summary', summary, height=120, key='summary_copy', help='Click the copy button to copy the summary.', disabled=False)
-
-            # --- Table of Abstracts ---
-            table_data = []
-            for abs_info in abstracts:
-                title = abs_info.get("title", "N/A")
-                journal = abs_info.get("journal", "N/A")
-                pmid = abs_info.get("pmid")
-                doi = abs_info.get("doi")
-                abstract = abs_info.get("abstract", "N/A")
-                pmid_link = f"[PubMed](https://pubmed.ncbi.nlm.nih.gov/{pmid}/)" if pmid else ""
-                doi_link = f"[DOI](https://doi.org/{doi})" if doi else ""
-                table_data.append({
-                    "Title": title,
-                    "Journal": journal,
-                    "PubMed ID": pmid_link,
-                    "DOI": doi_link,
-                    "Abstract": abstract
-                })
-            st.subheader("Table of Abstracts")
-            st.dataframe(pd.DataFrame(table_data))
-
-            # --- Show Full Abstracts (expand/collapse) ---
-            st.subheader("Full Abstracts")
-            for i, abs_info in enumerate(abstracts, 1):
-                with st.expander(f"{i}. {abs_info.get('title', 'Untitled Study')}"):
-                    st.markdown(f"**Journal:** {abs_info.get('journal', 'N/A')}")
-                    pmid = abs_info.get("pmid")
-                    doi = abs_info.get("doi")
-                    links = []
-                    if pmid:
-                        links.append(f'[PubMed](https://pubmed.ncbi.nlm.nih.gov/{pmid}/)')
-                    if doi:
-                        links.append(f'[DOI](https://doi.org/{doi})')
-                    link_str = " | ".join(links)
-                    st.markdown(link_str)
-                    st.markdown(abs_info.get("abstract", "No abstract available."))
-
-            # --- Optional: Feedback Section ---
-            st.markdown("---")
-            st.subheader("Was this summary helpful?")
-            feedback_rating = st.radio(
-                label="Your rating",
-                options=["👍 Yes", "👎 No"],
-                key="rating_radio"
-            )
-            feedback_text = st.text_area("Add a comment (optional)", key="feedback_text")
-            if st.button("Submit feedback"):
-                st.success("Thank you for your feedback!")
-
-# Show tech stack at the bottom
-st.markdown(f"<div style='margin-top:2em;font-size:0.95em;color:#888;'>{get_tech_stack()}</div>", unsafe_allow_html=True)
+st.caption("Tech stack: Streamlit (UI), EuropePMC API (data), Hugging Face Inference API (summarization), Pandas, Python 3.")

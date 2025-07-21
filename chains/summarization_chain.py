@@ -1,16 +1,14 @@
+import os
 import requests
 import re
-import os  # <-- make sure this is imported!
 
 HUGGINGFACE_SUMMARIZATION_URL = "https://api-inference.huggingface.co/models/sshleifer/distilbart-cnn-12-6"
 
 def strip_html_tags(text):
-    """Remove HTML tags from a string."""
     clean = re.compile('<.*?>')
     return re.sub(clean, '', text)
 
 def fetch_abstracts_from_europepmc(query: str, max_results: int = 3):
-    """Fetch abstracts from Europe PMC API given a search query, including PubMed ID and DOI."""
     base_url = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
     params = {
         "query": query,
@@ -40,9 +38,9 @@ def fetch_abstracts_from_europepmc(query: str, max_results: int = 3):
 
 def hf_summarize(text):
     payload = {"inputs": text}
-    hf_token = os.environ.get("2rwe-copilot")  # gets your HF token from secrets
-    headers = {"Authorization": f"Bearer {hf_token}"} if hf_token else {}
-    response = requests.post(HUGGINGFACE_SUMMARIZATION_URL, json=payload, headers=headers)
+    hf_token = os.environ.get("RWE_THREE_COPILOT")  # <-- your new variable name
+    headers = {"Authorization": f"Bearer {hf_token}"}
+    response = requests.post(HUGGINGFACE_SUMMARIZATION_URL, headers=headers, json=payload)
     if response.status_code == 200:
         try:
             return response.json()[0]["summary_text"]
@@ -52,10 +50,8 @@ def hf_summarize(text):
         return f"[Error: Hugging Face API returned status {response.status_code}]"
 
 def summarize_abstract(abstracts):
-    """Summarize a list of abstracts using Hugging Face Inference API: summarize each, then combine summaries."""
     if not abstracts:
         return "No abstracts found for that query."
-    # Limit to top 2 abstracts
     abstracts = abstracts[:2]
     summaries = []
     for a in abstracts:
@@ -67,7 +63,6 @@ def summarize_abstract(abstracts):
             summaries.append("[Error summarizing abstract]")
     if not summaries:
         return "No summaries could be generated."
-    # Combine summaries and summarize again for a final summary
     combined = " ".join(summaries)
     if len(combined) > 2000:
         combined = combined[:2000]
