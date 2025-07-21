@@ -1,3 +1,14 @@
+---
+title: RWE Copilot
+emoji: 🧬
+colorFrom: indigo
+colorTo: green
+sdk: streamlit
+sdk_version: 1.35.0
+app_file: app.py
+pinned: false
+---
+
 # RWE Copilot
 
 RWE Copilot is an AI-powered assistant for real-world evidence (RWE) teams. It retrieves and summarizes clinical literature for a given drug or disease using LangChain and Hugging Face models, and is built with Streamlit for interactivity.
