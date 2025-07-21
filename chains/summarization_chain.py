@@ -40,12 +40,23 @@ def fetch_abstracts_from_europepmc(query: str, max_results: int = 3):
     return results
 
 
-def summarize_abstract(query: str):
-    """Fetch real abstracts and summarize them."""
-    abstracts = fetch_abstracts_from_europepmc(query)
+def summarize_abstract(abstracts):
+    """Summarize a list of abstracts: summarize each, then combine summaries."""
     if not abstracts:
         return "No abstracts found for that query."
-    # Extract only the abstract text from each dict
-    combined_text = " ".join(a["abstract"] for a in abstracts)
-    summary = summarizer(combined_text, max_length=150, min_length=30, do_sample=False)[0]["summary_text"]
-    return strip_html_tags(summary)
+    # Summarize each abstract individually
+    summaries = []
+    for a in abstracts:
+        try:
+            text = a["abstract"]
+            summary = summarizer(text, max_length=80, min_length=20, do_sample=False)[0]["summary_text"]
+            summaries.append(summary)
+        except Exception as e:
+            summaries.append("[Error summarizing abstract]")
+    # Combine the summaries into a final summary
+    combined = " ".join(summaries)
+    try:
+        final_summary = summarizer(combined, max_length=150, min_length=30, do_sample=False)[0]["summary_text"]
+    except Exception as e:
+        final_summary = " ".join(summaries)
+    return strip_html_tags(final_summary)
