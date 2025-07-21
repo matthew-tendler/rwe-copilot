@@ -1,14 +1,13 @@
 import requests
 import re
+import os  # <-- make sure this is imported!
 
 HUGGINGFACE_SUMMARIZATION_URL = "https://api-inference.huggingface.co/models/sshleifer/distilbart-cnn-12-6"
-
 
 def strip_html_tags(text):
     """Remove HTML tags from a string."""
     clean = re.compile('<.*?>')
     return re.sub(clean, '', text)
-
 
 def fetch_abstracts_from_europepmc(query: str, max_results: int = 3):
     """Fetch abstracts from Europe PMC API given a search query, including PubMed ID and DOI."""
@@ -39,10 +38,11 @@ def fetch_abstracts_from_europepmc(query: str, max_results: int = 3):
             })
     return results
 
-
 def hf_summarize(text):
     payload = {"inputs": text}
-    response = requests.post(HUGGINGFACE_SUMMARIZATION_URL, json=payload)
+    hf_token = os.environ.get("2rwe-copilot")  # gets your HF token from secrets
+    headers = {"Authorization": f"Bearer {hf_token}"} if hf_token else {}
+    response = requests.post(HUGGINGFACE_SUMMARIZATION_URL, json=payload, headers=headers)
     if response.status_code == 200:
         try:
             return response.json()[0]["summary_text"]
@@ -50,7 +50,6 @@ def hf_summarize(text):
             return "[Error: Unexpected response from Hugging Face API]"
     else:
         return f"[Error: Hugging Face API returned status {response.status_code}]"
-
 
 def summarize_abstract(abstracts):
     """Summarize a list of abstracts using Hugging Face Inference API: summarize each, then combine summaries."""
@@ -74,7 +73,6 @@ def summarize_abstract(abstracts):
         combined = combined[:2000]
     final_summary = hf_summarize(combined)
     return strip_html_tags(final_summary)
-
 
 def get_tech_stack():
     return (
