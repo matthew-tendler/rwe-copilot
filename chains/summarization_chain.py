@@ -41,10 +41,11 @@ def fetch_abstracts_from_europepmc(query: str, max_results: int = 3):
 
 
 def summarize_abstract(abstracts):
-    """Summarize a list of abstracts: summarize each, then combine summaries."""
+    """Summarize a list of abstracts: summarize each, then combine summaries. Limit to top 2 abstracts and truncate combined summaries if too long."""
     if not abstracts:
         return "No abstracts found for that query."
-    # Summarize each abstract individually
+    # Limit to top 2 abstracts
+    abstracts = abstracts[:2]
     summaries = []
     for a in abstracts:
         try:
@@ -53,8 +54,11 @@ def summarize_abstract(abstracts):
             summaries.append(summary)
         except Exception as e:
             summaries.append("[Error summarizing abstract]")
-    # Combine the summaries into a final summary
+    # Combine the summaries into a final summary, but truncate if too long
     combined = " ".join(summaries)
+    max_chars = 2000
+    if len(combined) > max_chars:
+        combined = combined[:max_chars]
     try:
         final_summary = summarizer(combined, max_length=150, min_length=30, do_sample=False)[0]["summary_text"]
     except Exception as e:
