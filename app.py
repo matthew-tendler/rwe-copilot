@@ -1,6 +1,8 @@
 import streamlit as st
 from chains.summarization_chain import summarize_abstract, fetch_abstracts_from_europepmc
 import pandas as pd
+import openai
+client = openai.OpenAI(api_key="sk-...your-key-here...")
 
 st.title("🧠 RWE Copilot")
 

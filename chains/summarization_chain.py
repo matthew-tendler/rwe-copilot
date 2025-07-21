@@ -3,7 +3,7 @@ import openai
 import re
 import os
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
+client = openai.OpenAI()
 
 def strip_html_tags(text):
     """Remove HTML tags from a string."""
@@ -29,10 +29,14 @@ def fetch_abstracts_from_europepmc(query: str, max_results: int = 3):
             abstract = strip_html_tags(item["abstractText"])
             pmid = item.get("pmid")
             doi = item.get("doi")
+            title = item.get("title")
+            journal = item.get("journalTitle")
             results.append({
                 "abstract": abstract,
                 "pmid": pmid,
-                "doi": doi
+                "doi": doi,
+                "title": title,
+                "journal": journal
             })
     return results
 
@@ -40,7 +44,7 @@ def fetch_abstracts_from_europepmc(query: str, max_results: int = 3):
 def openai_summarize(text, prompt_prefix="Summarize the following scientific abstract:"):
     prompt = f"{prompt_prefix}\n{text}\nSummary:"
     try:
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="gpt-4o",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=120,
