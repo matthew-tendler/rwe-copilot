@@ -9,7 +9,7 @@ RWE Copilot is an AI-powered assistant for real-world evidence (RWE) teams. It r
 - Interactive frontend built with Streamlit
 - Modular chains for GenAI logic
 
-## 🧠 Tech Stack
+## Technology Stack
 
 - Python
 - Streamlit
