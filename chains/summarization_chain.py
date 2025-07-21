@@ -1,9 +1,8 @@
 import requests
-import openai
 import re
-import os
 
-client = openai.OpenAI()
+HUGGINGFACE_SUMMARIZATION_URL = "https://api-inference.huggingface.co/models/sshleifer/distilbart-cnn-12-6"
+
 
 def strip_html_tags(text):
     """Remove HTML tags from a string."""
@@ -41,22 +40,20 @@ def fetch_abstracts_from_europepmc(query: str, max_results: int = 3):
     return results
 
 
-def openai_summarize(text, prompt_prefix="Summarize the following scientific abstract:"):
-    prompt = f"{prompt_prefix}\n{text}\nSummary:"
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=120,
-            temperature=0.3,
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        return "[Error from OpenAI: {}]".format(str(e))
+def hf_summarize(text):
+    payload = {"inputs": text}
+    response = requests.post(HUGGINGFACE_SUMMARIZATION_URL, json=payload)
+    if response.status_code == 200:
+        try:
+            return response.json()[0]["summary_text"]
+        except Exception:
+            return "[Error: Unexpected response from Hugging Face API]"
+    else:
+        return f"[Error: Hugging Face API returned status {response.status_code}]"
 
 
 def summarize_abstract(abstracts):
-    """Summarize a list of abstracts using OpenAI: summarize each, then combine summaries."""
+    """Summarize a list of abstracts using Hugging Face Inference API: summarize each, then combine summaries."""
     if not abstracts:
         return "No abstracts found for that query."
     # Limit to top 2 abstracts
@@ -65,7 +62,7 @@ def summarize_abstract(abstracts):
     for a in abstracts:
         try:
             text = a["abstract"][:800]
-            summary = openai_summarize(text)
+            summary = hf_summarize(text)
             summaries.append(summary)
         except Exception as e:
             summaries.append("[Error summarizing abstract]")
@@ -75,5 +72,12 @@ def summarize_abstract(abstracts):
     combined = " ".join(summaries)
     if len(combined) > 2000:
         combined = combined[:2000]
-    final_summary = openai_summarize(combined, prompt_prefix="Combine and summarize the following research summaries:")
+    final_summary = hf_summarize(combined)
     return strip_html_tags(final_summary)
+
+
+def get_tech_stack():
+    return (
+        "Tech stack: Streamlit (UI), EuropePMC API (data), Hugging Face Inference API (DistilBART CNN summarization, free hosted), "
+        "Pandas (table), Python 3."
+    )

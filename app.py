@@ -1,5 +1,5 @@
 import streamlit as st
-from chains.summarization_chain import summarize_abstract, fetch_abstracts_from_europepmc
+from chains.summarization_chain import summarize_abstract, fetch_abstracts_from_europepmc, get_tech_stack
 import pandas as pd
 import openai
 client = openai.OpenAI(api_key="sk-...your-key-here...")
@@ -73,3 +73,6 @@ if query and submitted:
             feedback_text = st.text_area("Add a comment (optional)", key="feedback_text")
             if st.button("Submit feedback"):
                 st.success("Thank you for your feedback!")
+
+# Show tech stack at the bottom
+st.markdown(f"<div style='margin-top:2em;font-size:0.95em;color:#888;'>{get_tech_stack()}</div>", unsafe_allow_html=True)
