@@ -3,4 +3,4 @@ langchain
 transformers
 openai
 requests
-torch
+torch==2.0.1
