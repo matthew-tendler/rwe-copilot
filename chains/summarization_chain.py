@@ -1,10 +1,9 @@
 import requests
-from transformers import pipeline
+import openai
 import re
+import os
 
-
-# Set up the Hugging Face summarization model
-summarizer = pipeline("summarization", model="sshleifer/distilbart-cnn-12-6")
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 def strip_html_tags(text):
     """Remove HTML tags from a string."""
@@ -35,14 +34,25 @@ def fetch_abstracts_from_europepmc(query: str, max_results: int = 3):
                 "pmid": pmid,
                 "doi": doi
             })
-    print("Europe PMC raw response:", data)
-    print("Extracted abstracts:", results)
     return results
 
 
+def openai_summarize(text, prompt_prefix="Summarize the following scientific abstract:"):
+    prompt = f"{prompt_prefix}\n{text}\nSummary:"
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=120,
+            temperature=0.3,
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        return "[Error from OpenAI: {}]".format(str(e))
+
+
 def summarize_abstract(abstracts):
-    """Summarize a list of abstracts: summarize each, then combine summaries.
-    Safe for Hugging Face's token limit."""
+    """Summarize a list of abstracts using OpenAI: summarize each, then combine summaries."""
     if not abstracts:
         return "No abstracts found for that query."
     # Limit to top 2 abstracts
@@ -50,24 +60,16 @@ def summarize_abstract(abstracts):
     summaries = []
     for a in abstracts:
         try:
-            text = a["abstract"]
-            # Truncate individual abstracts to a safe length (~800 chars)
-            safe_text = text[:800]
-            summary = summarizer(safe_text, max_length=80, min_length=20, do_sample=False)[0]["summary_text"]
+            text = a["abstract"][:800]
+            summary = openai_summarize(text)
             summaries.append(summary)
         except Exception as e:
             summaries.append("[Error summarizing abstract]")
     if not summaries:
         return "No summaries could be generated."
-    # Combine summaries, and split further if needed
+    # Combine summaries and summarize again for a final summary
     combined = " ".join(summaries)
-    chunk_size = 900  # Characters. BART's limit is ~1024 tokens; 900 chars is a safe bet.
-    chunks = [combined[i:i + chunk_size] for i in range(0, len(combined), chunk_size)]
-    final_summaries = []
-    for chunk in chunks:
-        try:
-            summ = summarizer(chunk, max_length=100, min_length=30, do_sample=False)[0]["summary_text"]
-            final_summaries.append(summ)
-        except Exception:
-            final_summaries.append(chunk)
-    return strip_html_tags(" ".join(final_summaries))
+    if len(combined) > 2000:
+        combined = combined[:2000]
+    final_summary = openai_summarize(combined, prompt_prefix="Combine and summarize the following research summaries:")
+    return strip_html_tags(final_summary)
