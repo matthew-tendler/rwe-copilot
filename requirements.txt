@@ -3,3 +3,5 @@ langchain
 transformers
 openai
 requests
+torch
+
