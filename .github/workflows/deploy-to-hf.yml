@@ -1,0 +1,27 @@
+name: Deploy to Hugging Face Space
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Push to Hugging Face Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git config --global user.email "mstendler@gmail.com"
+          git config --global user.name "matthew-tendler"
+
+          git clone https://huggingface.co/spaces/matthew-tendler/rwe-copilot hf_space
+          rsync -av --exclude '.git' ./ hf_space/
+          cd hf_space
+          git add .
+          git commit -m "Update from GitHub repo"
+          git push https://matthew-tendler:$HF_TOKEN@huggingface.co/spaces/matthew-tendler/rwe-copilot HEAD:main
